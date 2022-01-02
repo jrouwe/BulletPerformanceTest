@@ -26,6 +26,9 @@ btConstraintSolverPoolMt* gSolverPool = nullptr;
 btConstraintSolver* gSolver = nullptr;
 btDynamicsWorld* gDynamicsWorld = nullptr;
 btAlignedObjectArray<btCollisionShape*> gCollisionShapes;
+btVector3* gVertices = nullptr;
+short* gIndices = nullptr;
+btAlignedObjectArray<btRigidBody*> gRigidBodies;
 
 void createTerrain()
 {
@@ -36,18 +39,18 @@ void createTerrain()
 
 	// Create vertices
 	const int num_vertices = (n + 1) * (n + 1);
-	btVector3 *vertices = new btVector3[num_vertices];
+	gVertices = new btVector3[num_vertices];
 	for (int x = 0; x <= n; ++x)
 		for (int z = 0; z <= n; ++z)
 		{
 			float height = sin(float(x) * 50.0f / n) * cos(float(z) * 50.0f / n);
-			vertices[z * (n + 1) + x] = btVector3(cell_size * x, max_height * height, cell_size * z);
+			gVertices[z * (n + 1) + x] = btVector3(cell_size * x, max_height * height, cell_size * z);
 		}
 
 	// Create regular grid of triangles
 	const int num_triangles = n * n * 2;
-	short *indices = new short[num_triangles * 3];
-	short *next = indices;
+	gIndices = new short[num_triangles * 3];
+	short *next = gIndices;
 	for (int x = 0; x < n; ++x)
 		for (int z = 0; z < n; ++z)
 		{
@@ -65,10 +68,10 @@ void createTerrain()
 	// Create mesh shape
 	btTriangleIndexVertexArray* mesh_interface = new btTriangleIndexVertexArray();	
 	btIndexedMesh part;
-	part.m_vertexBase = (const unsigned char *)vertices;
+	part.m_vertexBase = (const unsigned char *)gVertices;
 	part.m_vertexStride = sizeof(btVector3);
 	part.m_numVertices = num_vertices;
-	part.m_triangleIndexBase = (const unsigned char *)indices;
+	part.m_triangleIndexBase = (const unsigned char *)gIndices;
 	part.m_triangleIndexStride = sizeof(short) * 3;
 	part.m_numTriangles = num_triangles;
 	part.m_indexType = PHY_SHORT;
@@ -87,6 +90,7 @@ void createTerrain()
 	body->setFriction(btScalar(0.5));
 	body->setRestitution(btScalar(0.6));
 	gDynamicsWorld->addRigidBody(body);
+	gRigidBodies.push_back(body);
 }
 
 void createDynamic()
@@ -114,6 +118,14 @@ void createDynamic()
 		666.666687f,
 	};
 
+	// Inner radius of shape (smallest distance from center of mass to surface)
+	float shape_inner_radius[] = {
+		0.5f,
+		0.5f,
+		0.5f,
+		0.25f
+	};
+
 	// Construct bodies
 	for (int x = -10; x <= 10; ++x)
 		for (int y = 0; y < num_shapes; ++y)
@@ -121,6 +133,7 @@ void createDynamic()
 			{
 				btCollisionShape *shape = shapes[y];
 				float mass = shape_masses[y];
+				float inner_radius = shape_inner_radius[y];
 
 				btVector3 local_inertia(0, 0, 0);
 				shape->calculateLocalInertia(mass, local_inertia);
@@ -134,7 +147,10 @@ void createDynamic()
 				btRigidBody* body = new btRigidBody(cinfo);
 				body->setFriction(btScalar(0.5));
 				body->setRestitution(btScalar(0.6));
+				body->setCcdSweptSphereRadius(inner_radius);
+				body->setCcdMotionThreshold(0.75f * inner_radius); // Using same distance as Jolt
 				gDynamicsWorld->addRigidBody(body);
+				gRigidBodies.push_back(body);
 			}
 }
 
@@ -184,6 +200,7 @@ void initPhysics(int inNumThreads, bool inCCD)
 	gDynamicsWorld->setGravity(btVector3(0, -9.81f, 0));
 	gDynamicsWorld->getSolverInfo().m_solverMode = SOLVER_SIMD | SOLVER_USE_WARMSTARTING;
 	gDynamicsWorld->getSolverInfo().m_numIterations = 10; // Same amount of iterations as Jolt
+	gDynamicsWorld->getDispatchInfo().m_useContinuous = inCCD;
 
 	// Create test scene
 	createTerrain();
@@ -198,20 +215,23 @@ void stepPhysics()
 void cleanupPhysics()
 {
 	// Remove the rigidbodies from the dynamics world and delete them
-	for (int i = gDynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--)
+	for (int i = 0; i < gRigidBodies.size(); ++i)
 	{
-		btCollisionObject* obj = gDynamicsWorld->getCollisionObjectArray()[i];
-		btRigidBody* body = btRigidBody::upcast(obj);
-		if (body && body->getMotionState())
-			delete body->getMotionState();
-		gDynamicsWorld->removeCollisionObject(obj);
-		delete obj;
+		btRigidBody* body = gRigidBodies[i];
+		gDynamicsWorld->removeRigidBody(body);
+		delete body->getMotionState();
+		delete body;
 	}
+	gRigidBodies.clear();
 
 	// Delete shapes
 	for (int j = 0; j < gCollisionShapes.size(); j++)
 		delete gCollisionShapes[j];
 	gCollisionShapes.clear();
+
+	// Delete our vertex and index buffer
+	delete [] gVertices;
+	delete [] gIndices;
 
 	// Delete dynamics world
 	delete gDynamicsWorld;
