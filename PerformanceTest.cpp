@@ -4,6 +4,8 @@
 #include "BulletDynamics/Dynamics/btDiscreteDynamicsWorldMt.h"
 #include "BulletDynamics/ConstraintSolver/btSequentialImpulseConstraintSolverMt.h"
 
+static_assert(sizeof(btScalar) == sizeof(float), "Assuming single precision numbers");
+
 // STL includes
 #include <iostream>
 #include <fstream>
