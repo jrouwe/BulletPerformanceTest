@@ -180,6 +180,7 @@ void initPhysics(int inNumThreads, bool inCCD)
 
 		// Create solver
 		gSolver = new btSequentialImpulseConstraintSolverMt();
+		btSequentialImpulseConstraintSolverMt::s_minimumContactManifoldsForBatching = 2000; // Suggested performance improvement by Erwin Coumans
 
 		// Create world
 		gDynamicsWorld = new btDiscreteDynamicsWorldMt(gDispatcher, gOverlappingPairCache, gSolverPool, gSolver, gCollisionConfiguration);
