@@ -200,7 +200,6 @@ void initPhysics(int inNumThreads, bool inCCD)
 	// Configure the world
 	gDynamicsWorld->setGravity(btVector3(0, -9.81f, 0));
 	gDynamicsWorld->getSolverInfo().m_solverMode = SOLVER_SIMD | SOLVER_USE_WARMSTARTING;
-	gDynamicsWorld->getSolverInfo().m_numIterations = 10; // Same amount of iterations as Jolt
 	gDynamicsWorld->getDispatchInfo().m_useContinuous = inCCD;
 
 	// Create test scene
